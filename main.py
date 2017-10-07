@@ -46,6 +46,7 @@ def load_vgg(sess, vgg_path):
 
     return vgg_input, keep, vgg_L3, vgg_L4, vgg_L7
 
+
 tests.test_load_vgg(load_vgg, tf)
 
 
@@ -58,8 +59,35 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :param num_classes: Number of classes to classify
     :return: The Tensor for the last layer of output
     """
-    # TODO: Implement function
-    return None
+
+    # Block 1: 1x1 Conv followed by Deconv
+    conv_7 = tf.layers.conv2d(vgg_layer7_out, num_classes, 1, 1,
+                              kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
+                              trainable=False)
+    deconv1 = tf.layers.conv2d_transpose(conv_7, num_classes, 4, 2,
+                                         kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
+                                         padding='same')
+
+    # Block 1: 1x1 Conv followed by skip connecton and then Deconv
+    conv_4 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1, 1,
+                              kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
+                              trainable=False)
+    skip1 = tf.add(deconv1, conv_4)
+    deconv2 = tf.layers.conv2d_transpose(skip1, num_classes, 4, 2,
+                                         kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
+                                         padding='same')
+
+    conv_3 = tf.layers.conv2d(vgg_layer3_out, num_classes, 1, 1,
+                              kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
+                              trainable=False)
+    skip2 = tf.add(deconv2, conv_3)
+    output = tf.layers.conv2d_transpose(skip2, num_classes, 16, 8,
+                                        kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
+                                        padding='same')
+
+    return output
+
+
 tests.test_layers(layers)
 
 
