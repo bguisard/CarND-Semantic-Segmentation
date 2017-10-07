@@ -101,3 +101,10 @@ ENV/
 .mypy_cache/
 
 RUNS/
+
+# ADDED BY ME
+.vscode
+build
+tags
+.editorconfig
+.DS_Store
