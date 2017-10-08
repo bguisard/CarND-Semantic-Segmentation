@@ -33,18 +33,18 @@ def load_vgg(sess, vgg_path):
     vgg_layer7_out_tensor_name = 'layer7_out:0'
 
     # load vgg model
-    tf.saved_model.loader.load(sess, [vgg_tag], vgg_path) 
+    tf.saved_model.loader.load(sess, [vgg_tag], vgg_path)
 
     # assign graph to session
     graph = sess.graph
 
-    vgg_input = graph.get_tensor_by_name(vgg_input_tensor_name)
+    image_input = graph.get_tensor_by_name(vgg_input_tensor_name)
     keep = graph.get_tensor_by_name(vgg_keep_prob_tensor_name)
     vgg_L3 = graph.get_tensor_by_name(vgg_layer3_out_tensor_name)
     vgg_L4 = graph.get_tensor_by_name(vgg_layer4_out_tensor_name)
     vgg_L7 = graph.get_tensor_by_name(vgg_layer7_out_tensor_name)
 
-    return vgg_input, keep, vgg_L3, vgg_L4, vgg_L7
+    return image_input, keep, vgg_L3, vgg_L4, vgg_L7
 
 
 tests.test_load_vgg(load_vgg, tf)
@@ -63,26 +63,26 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     # Block 1: 1x1 Conv followed by Deconv
     conv_7 = tf.layers.conv2d(vgg_layer7_out, num_classes, 1, 1,
                               kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
-                              trainable=True)
-    deconv1 = tf.layers.conv2d_transpose(conv_7, num_classes, 4, 2,
+                              padding='same')
+    deconv_1 = tf.layers.conv2d_transpose(conv_7, num_classes, 4, 2,
                                          kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
                                          padding='same')
 
     # Block 2: 1x1 Conv followed by skip connecton and then Deconv
     conv_4 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1, 1,
                               kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
-                              trainable=True)
-    skip1 = tf.add(deconv1, conv_4)
-    deconv2 = tf.layers.conv2d_transpose(skip1, num_classes, 4, 2,
+                              padding='same')
+    skip_1 = tf.add(deconv_1, conv_4)
+    deconv_2 = tf.layers.conv2d_transpose(skip_1, num_classes, 4, 2,
                                          kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
                                          padding='same')
 
     # Block 3: 1x1 Conv followed by skip connecton and then Deconv
     conv_3 = tf.layers.conv2d(vgg_layer3_out, num_classes, 1, 1,
                               kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
-                              trainable=True)
-    skip2 = tf.add(deconv2, conv_3)
-    output = tf.layers.conv2d_transpose(skip2, num_classes, 16, 8,
+                              padding='same')
+    skip_2 = tf.add(deconv_2, conv_3)
+    output = tf.layers.conv2d_transpose(skip_2, num_classes, 16, 8,
                                         kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
                                         padding='same')
 
@@ -129,21 +129,36 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     :param learning_rate: TF Placeholder for learning rate
     """
 
+    # TRAINING PARAMETERS
+    keep_probability = 0.85  # Probability of keeping node using Dropout
+    initial_lr = 1e-3        # Initial Learning Rate
+
     sess.run(tf.global_variables_initializer())
     for epoch in range(epochs):
-        print("\n********** Epoch: {} **********".format(epoch + 1))
+
+        # Learning Rate annealing
+        if epoch > 14 and epoch <= 27:
+            lr = initial_lr / 10
+        elif epoch > 27:
+            lr = initial_lr / 100
+        else:
+            lr = initial_lr
+
+        print("\n********** Epoch: {:02d} **********".format(epoch + 1))
+        print("Learning Rate: {:.2E}               ".format(lr))
+
         training_losses = []
         for img, lbl in get_batches_fn(batch_size):
             loss, _ = sess.run([cross_entropy_loss, train_op],
                                feed_dict={input_image: img,
                                           correct_label: lbl,
-                                          keep_prob: 0.85,
-                                          learning_rate: 1e-4})
+                                          keep_prob: keep_probability,
+                                          learning_rate: lr})
 
             training_losses.append(loss)
         epoch_loss = sum(training_losses)/len(training_losses)
-        print("Loss: {0:.5f}               ".format(epoch_loss))
-        print("******************************".format(epoch + 1, epoch_loss))
+        print("Loss: {0:.6f}               ".format(epoch_loss))
+        print("*******************************".format(epoch + 1, epoch_loss))
 
 
 tests.test_train_nn(train_nn)
@@ -156,6 +171,7 @@ def run():
     runs_dir = './runs'
     tests.test_for_kitti_dataset(data_dir)
     # NETWORK TRAINING PARAMS
+    # Obs: Training parameters are inside train_nn
     epochs = 30
     batch_size = 8
 
@@ -177,7 +193,7 @@ def run():
         # OPTIONAL: Augment Images for better results
         #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
 
-        # TODO: Build NN using load_vgg, layers, and optimize function
+        # Builds NN using load_vgg, layers, and optimize function
         ground_truth = tf.placeholder(tf.float32, [None, None, None,
                                                    num_classes])
         lr = tf.placeholder(tf.float32)
@@ -187,11 +203,11 @@ def run():
         logits, train_op, loss = optimize(output, ground_truth, lr,
                                           num_classes)
 
-        # TODO: Train NN using the train_nn function
+        # Trains NN using the train_nn function
         train_nn(sess, epochs, batch_size, get_batches_fn, train_op, loss,
                  vgg_input, ground_truth, keep, lr)
 
-        # TODO: Save inference data using helper.save_inference_samples
+        # Saves inference data using helper.save_inference_samples
         helper.save_inference_samples(runs_dir, data_dir, sess, image_shape,
                                       logits, keep, vgg_input)
 
