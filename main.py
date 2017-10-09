@@ -60,29 +60,37 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :return: The Tensor for the last layer of output
     """
 
+    num_filters = 256
+
     # Block 1: 1x1 Conv followed by Deconv
-    conv_7 = tf.layers.conv2d(vgg_layer7_out, num_classes, 1, 1,
+    conv_7 = tf.layers.conv2d(vgg_layer7_out, num_filters, 1,
+                              kernel_initializer=tf.contrib.layers.xavier_initializer(),
                               kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
                               padding='same')
-    deconv_1 = tf.layers.conv2d_transpose(conv_7, num_classes, 4, 2,
-                                         kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
-                                         padding='same')
+    deconv_1 = tf.layers.conv2d_transpose(conv_7, num_filters, 4, 2,
+                                          kernel_initializer=tf.contrib.layers.xavier_initializer(),
+                                          kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
+                                          padding='same')
 
     # Block 2: 1x1 Conv followed by skip connecton and then Deconv
-    conv_4 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1, 1,
+    conv_4 = tf.layers.conv2d(vgg_layer4_out, num_filters, 1,
+                              kernel_initializer=tf.contrib.layers.xavier_initializer(),
                               kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
                               padding='same')
     skip_1 = tf.add(deconv_1, conv_4)
-    deconv_2 = tf.layers.conv2d_transpose(skip_1, num_classes, 4, 2,
-                                         kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
-                                         padding='same')
+    deconv_2 = tf.layers.conv2d_transpose(skip_1, num_filters, 4, 2,
+                                          kernel_initializer=tf.contrib.layers.xavier_initializer(),
+                                          kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
+                                          padding='same')
 
     # Block 3: 1x1 Conv followed by skip connecton and then Deconv
-    conv_3 = tf.layers.conv2d(vgg_layer3_out, num_classes, 1, 1,
+    conv_3 = tf.layers.conv2d(vgg_layer3_out, num_filters, 1,
+                              kernel_initializer=tf.contrib.layers.xavier_initializer(),
                               kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
                               padding='same')
     skip_2 = tf.add(deconv_2, conv_3)
     output = tf.layers.conv2d_transpose(skip_2, num_classes, 16, 8,
+                                        kernel_initializer=tf.contrib.layers.xavier_initializer(),
                                         kernel_regularizer=tf.contrib.layers.l2_regularizer(1e-3),
                                         padding='same')
 
@@ -103,10 +111,14 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     """
 
     logits = tf.reshape(nn_last_layer, (-1, num_classes))
-    optim = tf.train.AdamOptimizer(learning_rate)
+    labels = tf.reshape(correct_label, (-1, num_classes))
+
     loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits,
-                                                                  labels=correct_label))
+                                                                  labels=labels))
+
+    optim = tf.train.AdamOptimizer(learning_rate)
     train_op = optim.minimize(loss)
+
     return logits, train_op, loss
 
 
@@ -137,9 +149,9 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     for epoch in range(epochs):
 
         # Learning Rate annealing
-        if epoch > 14 and epoch <= 27:
+        if epoch > 5 and epoch <= 47:
             lr = initial_lr / 10
-        elif epoch > 27:
+        elif epoch > 47:
             lr = initial_lr / 100
         else:
             lr = initial_lr
@@ -172,7 +184,7 @@ def run():
     tests.test_for_kitti_dataset(data_dir)
     # NETWORK TRAINING PARAMS
     # Obs: Training parameters are inside train_nn
-    epochs = 30
+    epochs = 50
     batch_size = 8
 
     # Download pretrained vgg model
